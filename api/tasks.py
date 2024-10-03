@@ -10,7 +10,7 @@ def import_products(file_path):
     # Iterate through rows and create Product objects
     for _, row in data.iterrows():
         Product.objects.update_or_create(
-            name=row['name'],
+            name=row['product_name'],
             defaults={'amount': row['amount']},
         )
     return f"Imported {len(data)} products successfully."
