@@ -87,7 +87,8 @@ python -m venv env
 env\Scripts\activate
 pip install -r requirements.txt
 ```
-
+  a. **Create superuser for admin access**
+    `python manage.py createsuperuser`
 3. **Set Up the Database:**
 ```
 python manage.py makemigrations
