@@ -1,12 +1,13 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import OrderViewSet, ProductViewSet
+from .views import OrderViewSet, ProductViewSet, PlatformApiCallViewSet
 
 from rest_framework.authtoken.views import obtain_auth_token
 
 router = DefaultRouter()
 router.register(r'orders', OrderViewSet, basename='order')
-router.register(r'products', ProductViewSet, basename='product')
+router.register(r'products', ProductViewSet, basename='product'),
+router.register(r'api-calls', PlatformApiCallViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

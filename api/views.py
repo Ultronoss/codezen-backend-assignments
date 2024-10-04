@@ -1,8 +1,8 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Order, Product
-from .serializers import OrderSerializer, ProductSerializer
+from .models import Order, Product, PlatformApiCall
+from .serializers import OrderSerializer, ProductSerializer, PlatformApiCallSerializer
 from .permissions import IsOwner
 from .mixins import PlatformApiCallMixin
 from .decorators import customer_only
@@ -52,3 +52,17 @@ class ProductViewSet(PlatformApiCallMixin, viewsets.ModelViewSet):
     search_fields = ['name']
     ordering_fields = ['amount', 'name']
     ordering = ['name']
+
+class PlatformApiCallViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = PlatformApiCall.objects.all()
+    serializer_class = PlatformApiCallSerializer
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
