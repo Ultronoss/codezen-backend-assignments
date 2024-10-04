@@ -1,84 +1,54 @@
-from rest_framework import viewsets, permissions, filters, generics, status
-from rest_framework.authentication import TokenAuthentication
+from rest_framework import viewsets, filters, status
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Customer, Seller, Product, Order, PlatformApiCall
-from .serializers import (
-    CustomerSerializer, SellerSerializer, ProductSerializer,
-    OrderSerializer, PlatformApiCallSerializer, CustomerRegistrationSerializer,
-    SellerRegistrationSerializer
-)
-from .permissions import IsOwnerOrReadOnly
-from .mixins import APILoggingMixin
-from rest_framework.permissions import AllowAny
-from rest_framework.authtoken.models import Token
+from .models import Order, Product
+from .serializers import OrderSerializer, ProductSerializer
+from .permissions import IsOwner
+from .mixins import PlatformApiCallMixin
+from .decorators import customer_only
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
-class CustomerViewSet(APILoggingMixin, viewsets.ModelViewSet):
-    queryset = Customer.objects.all()
-    serializer_class = CustomerSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
-
-class SellerViewSet(APILoggingMixin, viewsets.ModelViewSet):
-    queryset = Seller.objects.all()
-    serializer_class = SellerSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
-
-class ProductViewSet(APILoggingMixin, viewsets.ModelViewSet):
-    queryset = Product.objects.all()
-    serializer_class = ProductSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['name']
-
-class OrderViewSet(APILoggingMixin, viewsets.ModelViewSet):
+class OrderViewSet(PlatformApiCallMixin, viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related('customer', 'seller').prefetch_related('products')
     serializer_class = OrderSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticated, IsOwner]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['products']
-    search_fields = ['customer__name', 'seller__name']
+    
+    # Adjust filterset fields
+    filterset_fields = ['customer', 'seller', 'amount', 'products']  
+    search_fields = ['products__name']  # Searching through product names
     ordering_fields = ['amount', 'created_at']
+    ordering = ['created_at']
 
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'customer_profile'):
-            return self.queryset.filter(customer__user=user)
-        return self.queryset
+        if hasattr(user, 'customer'):
+            # Filter orders by customer linked to the user
+            return self.queryset.filter(customer__user=user).select_related('customer', 'seller').prefetch_related('products')
+        return self.queryset.none()
 
-class PlatformApiCallViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = PlatformApiCall.objects.all()
-    serializer_class = PlatformApiCallSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [permissions.IsAdminUser]
+    def list(self, request, *args, **kwargs):
+        # Apply custom sorting like top 5
+        top = request.query_params.get('top', None)
+        queryset = self.filter_queryset(self.get_queryset())
 
-class CustomerRegistrationView(generics.CreateAPIView):
-    serializer_class = CustomerRegistrationSerializer
-    permission_classes = [AllowAny]
+        if top:
+            queryset = queryset.order_by('-amount')[:5]
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        customer = serializer.save()
-        token, created = Token.objects.get_or_create(user=customer.user)
-        headers = self.get_success_headers(serializer.data)
-        data = serializer.data
-        data['token'] = token.key
-        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
-class SellerRegistrationView(generics.CreateAPIView):
-    serializer_class = SellerRegistrationSerializer
-    permission_classes = [AllowAny]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        seller = serializer.save()
-        token, created = Token.objects.get_or_create(user=seller.user)
-        headers = self.get_success_headers(serializer.data)
-        data = serializer.data
-        data['token'] = token.key
-        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
+class ProductViewSet(PlatformApiCallMixin, viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name']
+    ordering_fields = ['amount', 'name']
+    ordering = ['name']

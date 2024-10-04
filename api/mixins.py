@@ -1,18 +1,15 @@
 from .models import PlatformApiCall
-import json
+from django.utils import timezone
 
-class APILoggingMixin:
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        try:
-            user = request.user if request.user.is_authenticated else None
+class PlatformApiCallMixin:
+    def finalize_response(self, request, response, *args, **kwargs):
+        # Log the API call only if the user is authenticated
+        if request.user.is_authenticated:
             PlatformApiCall.objects.create(
-                user=user,
+                user=request.user,
                 requested_url=request.build_absolute_uri(),
-                requested_data=json.dumps(request.data) if request.data else '',
-                response_data=response.content.decode('utf-8') if response.content else '',
+                requested_data=request.data if request.method in ['POST', 'PUT', 'PATCH'] else {},
+                response_data=response.data,
+                timestamp=timezone.now()
             )
-        except Exception as e:
-            # Handle logging errors if necessary
-            pass
-        return response
+        return super().finalize_response(request, response, *args, **kwargs)
