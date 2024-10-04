@@ -32,15 +32,26 @@ class ProductSerializer(serializers.ModelSerializer):
         return value
 
 class OrderSerializer(serializers.ModelSerializer):
-    customer = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all())
-    seller = serializers.PrimaryKeyRelatedField(queryset=Seller.objects.all())
-    products = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=True)
+    customer = CustomerSerializer(read_only=True)
+    seller = SellerSerializer(read_only=True)
+    products = ProductSerializer(many=True, read_only=True)
+    customer_id = serializers.PrimaryKeyRelatedField(
+        queryset=Customer.objects.all(), source='customer', write_only=True
+    )
+    seller_id = serializers.PrimaryKeyRelatedField(
+        queryset=Seller.objects.all(), source='seller', write_only=True
+    )
+    product_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(), source='products', many=True, write_only=True
+    )
 
     class Meta:
         model = Order
-        fields = ['id', 'customer', 'seller', 'products', 'amount', 'created_at']
+        fields = ['id', 'customer', 'seller', 'products', 'customer_id', 'seller_id', 'product_ids', 'amount', 'created_at']
 
 class PlatformApiCallSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
     class Meta:
         model = PlatformApiCall
         fields = ['id', 'user', 'requested_url', 'requested_data', 'response_data', 'timestamp']

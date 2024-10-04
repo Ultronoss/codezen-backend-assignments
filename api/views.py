@@ -1,30 +1,28 @@
 from rest_framework import viewsets, filters, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Order, Product, PlatformApiCall
 from .serializers import OrderSerializer, ProductSerializer, PlatformApiCallSerializer
-from .permissions import IsOwner
+from .permissions import IsOwnerOrAdmin
 from .mixins import PlatformApiCallMixin
-from .decorators import customer_only
-from rest_framework.decorators import action
 from rest_framework.response import Response
 
 class OrderViewSet(PlatformApiCallMixin, viewsets.ModelViewSet):
     queryset = Order.objects.all().select_related('customer', 'seller').prefetch_related('products')
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated, IsOwner]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
-    # Adjust filterset fields
-    filterset_fields = ['customer', 'seller', 'amount', 'products']  
-    search_fields = ['products__name']  # Searching through product names
+    filterset_fields = ['customer', 'seller', 'amount', 'products']
+    search_fields = ['products__name']
     ordering_fields = ['amount', 'created_at']
     ordering = ['created_at']
 
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'customer'):
-            # Filter orders by customer linked to the user
+        if user.is_staff:
+            return self.queryset.all().select_related('customer', 'seller').prefetch_related('products')
+        elif hasattr(user, 'customer'):
             return self.queryset.filter(customer__user=user).select_related('customer', 'seller').prefetch_related('products')
         return self.queryset.none()
 
@@ -56,7 +54,7 @@ class ProductViewSet(PlatformApiCallMixin, viewsets.ModelViewSet):
 class PlatformApiCallViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PlatformApiCall.objects.all()
     serializer_class = PlatformApiCallSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminUser]  # Only admins can view API calls
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
